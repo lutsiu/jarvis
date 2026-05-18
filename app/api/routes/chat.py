@@ -1,19 +1,30 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-from app.ai.openai_client import generate_answer
+from app.db.database import get_db
 from app.schemas.chat import ChatRequest, ChatResponse
+from app.services.chat_service import handle_chat_message
+
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
+
 @router.post("", response_model=ChatResponse)
-def chat(request: ChatRequest):
-  try: 
-    answer = generate_answer(request.message)
-    return ChatResponse(answer=answer)
-  
-  except Exception as error: 
-    raise HTTPException(
-      status_code=500,
-      default=f"AI response generation failed: {str(error)}",
-    )
-  
+def chat(request: ChatRequest, db: Session = Depends(get_db)):
+    try:
+        conversation_id, answer = handle_chat_message(
+            db=db,
+            message=request.message,
+            conversation_id=request.conversation_id,
+        )
+
+        return ChatResponse(
+            conversation_id=conversation_id,
+            answer=answer,
+        )
+
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error))
