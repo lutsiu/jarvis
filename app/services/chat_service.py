@@ -5,6 +5,33 @@ from sqlalchemy.orm import Session
 from app.ai.openai_client import generate_answer, stream_answer
 from app.models.conversation import Conversation
 from app.models.message import Message
+from app.services.memory_service import get_recent_memories
+
+
+def build_memory_system_message(db: Session) -> dict[str, str]:
+    memories = get_recent_memories(db, limit=10)
+
+    if not memories:
+        memory_context = "No long-term memories stored yet."
+    else:
+        memory_context = "\n".join(
+            f"- [{memory.category}] {memory.content}"
+            for memory in memories
+        )
+
+    return {
+        "role": "system",
+        "content": f"""
+You are Jarvis, a helpful personal AI assistant.
+
+Use the following long-term memories when they are relevant.
+Do not mention memories directly unless the user asks.
+
+Long-term memories:
+{memory_context}
+""".strip(),
+    }
+
 
 def handle_chat_message(
     db: Session,
@@ -36,10 +63,12 @@ def handle_chat_message(
     previous_messages = (
         db.query(Message)
         .filter(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.asc())
+        .order_by(Message.created_at.desc())
         .limit(20)
         .all()
     )
+
+    previous_messages = list(reversed(previous_messages))
 
     openai_messages = [
         {
@@ -48,6 +77,10 @@ def handle_chat_message(
         }
         for msg in previous_messages
     ]
+
+    system_message = build_memory_system_message(db)
+
+    openai_messages = [system_message] + openai_messages
 
     answer = generate_answer(openai_messages)
 
@@ -61,6 +94,7 @@ def handle_chat_message(
     db.commit()
 
     return conversation.id, answer
+
 
 def handle_stream_chat_message(
     db: Session,
@@ -106,6 +140,10 @@ def handle_stream_chat_message(
         }
         for msg in previous_messages
     ]
+
+    system_message = build_memory_system_message(db)
+
+    openai_messages = [system_message] + openai_messages
 
     full_answer = ""
 
