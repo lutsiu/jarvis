@@ -6,6 +6,9 @@ from app.models.conversation import Conversation
 from app.models.message import Message
 from app.api.routes.memory import router as memory_router
 from app.models.memory import Memory
+from app.models.document import Document
+from app.api.routes.documents import router as documents_router
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -19,3 +22,4 @@ def health_check():
 
 app.include_router(chat_router, prefix="/api")
 app.include_router(memory_router, prefix="/api")
+app.include_router(documents_router, prefix="/api")
